@@ -64,8 +64,29 @@ do
     done
 done
 pacman -Syy --noconfirm
-pacman -Rndd --noconfirm libverto || true
-pacman -S --overwrite='*' --noconfirm - < <(pacman -Qqn)
+# libverto is safe to pre-remove (pacman doesn't link to it). Skip cleanly if absent.
+pacman -Qq libverto &>/dev/null && pacman -Rndd --noconfirm libverto || true
+# libngtcp2 / libngtcp2-quictls / libngtcp2-crypto-ossl CANNOT be pre-removed: pacman's
+# libcurl in current archlinux:latest hard-links to libngtcp2_crypto_ossl.so.0, so
+# deleting the package breaks pacman immediately ("error while loading shared libraries").
+# These packages also pull libssl.so=3 / libcrypto.so=3, which conflicts with the SteamOS
+# openssl 1.1.x downgrade we're about to apply.
+#
+# Workaround: exclude them from the install set and use --assume-installed to satisfy the
+# libssl.so / libcrypto.so virtual provides during the transaction. After the overwrite
+# libcurl is replaced with the older SteamOS build that no longer depends on libngtcp2,
+# so we can then remove the now-orphaned libngtcp2* packages safely.
+mapfile -t _qqn < <(pacman -Qqn | grep -vE '^(libverto|libngtcp2|libngtcp2-quictls|libngtcp2-crypto-ossl)$')
+pacman -S \
+    --overwrite='*' \
+    --assume-installed='libssl.so=3-64' \
+    --assume-installed='libcrypto.so=3-64' \
+    --noconfirm "${_qqn[@]}"
+# Drop the orphaned libngtcp2* packages now that pacman is on the SteamOS libcurl.
+for _p in libngtcp2 libngtcp2-quictls libngtcp2-crypto-ossl
+do
+    pacman -Qq "$_p" &>/dev/null && pacman -Rndd --noconfirm "$_p" || true
+done
 # The SteamOS snapshot of pacman.conf carries a DisableSandboxFilesystem directive that
 # the older pacman binary we just downgraded to doesn't recognise. In rootless podman
 # that combination makes pacman's Landlock setup fail with
