@@ -119,13 +119,13 @@ echo "Building droidcam..."
     pkgbase=droidcam
     pkgname='droidcam'
     _name=droidcam-linux-client
-    pkgver=2.1.3
+    pkgver=2.1.5
     url="https://github.com/dev47apps/droidcam-linux-client"
     #makedepends=('alsa-lib' 'ffmpeg' 'gtk3' 'libappindicator-gtk3' 'libjpeg-turbo' 'libusbmuxd' 'speex')
     #depends=('alsa-lib' 'ffmpeg' 'glib2' 'glibc' 'gtk3' 'libappindicator-gtk3' 'libjpeg-turbo' 'libusbmuxd' 'libx11' 'pango' 'speex' 'V4L2LOOPBACK-MODULE')
 
     curl -sSLo "${pkgbase}-${pkgver}.tar.gz" "${url}/archive/refs/tags/v${pkgver}.tar.gz"
-    echo "86d18029364d8ecd8b1a8fcae4cc37122f43683326fe49922b2ce2c8cf01e49d ${pkgbase}-${pkgver}.tar.gz" > "${pkgbase}-${pkgver}.tar.gz.sha256"
+    echo "00ec96ec7a660e4e3ffb2adc536d14af89c635766dadbf53326c1216187021f8 ${pkgbase}-${pkgver}.tar.gz" > "${pkgbase}-${pkgver}.tar.gz.sha256"
     sha256sum -c "${pkgbase}-${pkgver}.tar.gz.sha256"
 
     tar -xf "${pkgbase}-${pkgver}.tar.gz"
@@ -159,7 +159,7 @@ cp "$OUT_DIR/linuxdeploy-plugin-droidcam.sh" .
 # fix girepository-1.0 path
 mkdir -p /usr/lib/x86_64-linux-gnu/girepository-1.0
 
-DROIDCAM_VERSION=2.1.3
+DROIDCAM_VERSION=2.1.5
 KERNEL_VERSION="$(zstd -d -k -c "$OUT_DIR/v4l2loopback-dc.tar.zst" | tar -tf - | grep /v4l2loopback-dc\.ko | sed 's#^[./]*##' | sort -u | tail -n 1 | cut -d/ -f4)"
 
 OUTPUT="DroidCam-${DROIDCAM_VERSION}-${KERNEL_VERSION}-x86_64_SteamDeck.AppImage" ./linuxdeploy-x86_64.AppImage --appdir AppDir \
