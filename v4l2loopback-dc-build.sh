@@ -66,6 +66,12 @@ done
 pacman -Syy --noconfirm
 pacman -Rndd --noconfirm libverto || true
 pacman -S --overwrite='*' --noconfirm - < <(pacman -Qqn)
+# The SteamOS snapshot of pacman.conf carries a DisableSandboxFilesystem directive that
+# the older pacman binary we just downgraded to doesn't recognise. In rootless podman
+# that combination makes pacman's Landlock setup fail with
+# "could not apply the landlock ruleset", aborting every subsequent transaction.
+# Strip the directive after the downgrade is in place.
+sed -i -e '/^\s*DisableSandboxFilesystem\b/d' /etc/pacman.conf
 pacman -S --noconfirm --needed base-devel git mkinitcpio sudo wget
 rm -rf /usr/share/libalpm/hooks/*mkinitcpio*.hook || true
 su -l -c '[ ! -d droidcam ] && git clone https://aur.archlinux.org/droidcam.git ; cd droidcam ; sed -i -e "s/^\(pkgname\s*=\).*$/\1v4l2loopback-dc-dkms/" -e "s/^\(makedepends\s*=\)/#\1/" -e "s/^\(build()\)/_\1/" PKGBUILD ; makepkg -cCfsi --noconfirm' builduser
