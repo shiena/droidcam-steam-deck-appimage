@@ -26,8 +26,23 @@ trap cleanup EXIT
 
 cd "$BUILD_DIR"
 
+# CentOS 7 reached EOL on 2024-06-30, so the default mirrorlist / mirror.centos.org URLs
+# stopped resolving. Redirect every repo definition to the archived snapshot on
+# vault.centos.org before any yum call.
+sed -i \
+    -e 's/^mirrorlist=/#mirrorlist=/g' \
+    -e 's|^#\?baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' \
+    /etc/yum.repos.d/CentOS-*.repo
+
 yum -y update && yum clean all
 yum -y install epel-release
+# EPEL 7 also EOL'd alongside CentOS 7. After installing epel-release we redirect its repo
+# files to archives.fedoraproject.org so package metadata can still be resolved.
+sed -i \
+    -e 's/^mirrorlist=/#mirrorlist=/g' \
+    -e 's|^#\?baseurl=https\?://download.fedoraproject.org/pub/epel|baseurl=https://archives.fedoraproject.org/pub/archive/epel|g' \
+    -e 's|^metalink=|#metalink=|g' \
+    /etc/yum.repos.d/epel*.repo
 yum -y localinstall --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-7.noarch.rpm
 yum -y groupinstall 'Development Tools'
 yum -y install pkg-config \
