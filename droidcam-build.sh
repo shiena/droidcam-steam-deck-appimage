@@ -1,17 +1,8 @@
 #!/bin/bash
 set -eux
-# podman pull centos:7
-# podman run --device=/dev/fuse --cap-add SYS_ADMIN --tmpfs /tmp:exec -v ./:/tmp/out --rm -ti ubuntu:20.04 /tmp/out/droidcam-build.sh
-# ubuntu image
+# This script expects the centos:7 intermediate image built from Containerfile.centos,
+# which already has yum deps, libjpeg-turbo, and the linuxdeploy tools baked in.
 OUT_DIR="/tmp/out"
-
-# building in temporary directory to keep system clean
-# use RAM disk if possible (as in: not building on CI system like Travis, and RAM disk is available)
-# if [[ -z "$CI" ]] && [[ -d /dev/shm ]]; then
-#     TEMP_BASE=/dev/shm
-# else
-#     TEMP_BASE=/tmp
-# fi
 
 TEMP_BASE=/tmp
 BUILD_DIR="$(mktemp -d -p "$TEMP_BASE" appimage-build-XXXXXX)"
@@ -26,104 +17,17 @@ trap cleanup EXIT
 
 cd "$BUILD_DIR"
 
-# CentOS 7 reached EOL on 2024-06-30, so the default mirrorlist / mirror.centos.org URLs
-# stopped resolving. Redirect every repo definition to the archived snapshot on
-# vault.centos.org before any yum call.
-sed -i \
-    -e 's/^mirrorlist=/#mirrorlist=/g' \
-    -e 's|^#\?baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' \
-    /etc/yum.repos.d/CentOS-*.repo
-
-yum -y update && yum clean all
-yum -y install epel-release
-# EPEL 7 also EOL'd alongside CentOS 7. After installing epel-release we redirect its repo
-# files to archives.fedoraproject.org so package metadata can still be resolved.
-sed -i \
-    -e 's/^mirrorlist=/#mirrorlist=/g' \
-    -e 's|^#\?baseurl=https\?://download.fedoraproject.org/pub/epel|baseurl=https://archives.fedoraproject.org/pub/archive/epel|g' \
-    -e 's|^metalink=|#metalink=|g' \
-    /etc/yum.repos.d/epel*.repo
-yum -y localinstall --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-7.noarch.rpm
-yum -y groupinstall 'Development Tools'
-yum -y install pkg-config \
-    git \
-    cmake \
-    nasm \
-    ninja-build \
-    curl \
-    zstd \
-    fuse \
-    fuse-libs \
-    ffmpeg \
-    ffmpeg-devel \
-    alsa-lib \
-    alsa-lib-devel \
-    speex \
-    speex-devel \
-    libusbmuxd \
-    libusbmuxd-devel \
-    libplist \
-    libplist-devel \
-    libappindicator-gtk3 \
-    libappindicator-gtk3-devel \
-    librsvg2 \
-    librsvg2-devel
-
-# source the default compiler flags
+# Compiler flags and parallelism — the intermediate image already provides the toolchain.
 export CFLAGS="$(rpm --eval "%{optflags}")"
 export CXXFLAGS="$CFLAGS"
 export MAKEFLAGS="-j$(nproc)"
-
-export pkgdir="/usr"
-
-# libjpeg-turbo
-# https://gitlab.archlinux.org/archlinux/packaging/packages/libjpeg-turbo/-/blob/main/PKGBUILD?ref_type=heads
-echo "Building libjpeg-turbo..."
-(
-    pkgname=libjpeg-turbo
-    pkgver=3.0.3
-    url="https://libjpeg-turbo.org/"
-    _url="https://github.com/libjpeg-turbo/libjpeg-turbo/"
-
-    # depends=(glibc)
-    # makedepends=(
-    #   cmake
-    #   ninja
-    #   nasm
-    #   'java-environment>11'
-    #   strip-nondeterminism
-    # )
-    # optdepends=('java-runtime>11: for TurboJPEG Java wrapper')
-    # provides=(
-    #   libjpeg
-    #   libjpeg.so
-    #   libturbojpeg.so
-    # )
-
-    curl -sSLo "$pkgname-$pkgver.tar.gz" "$_url/releases/download/$pkgver/$pkgname-$pkgver.tar.gz"
-    echo "7c3a6660e7a54527eaa40929f5cc3d519842ffb7e961c32630ae7232b71ecaa19e89dbf5600c61038f0c5db289b607c2316fe9b6b03d482d770bcac29288d129 $pkgname-$pkgver.tar.gz" > "$pkgname-$pkgver.tar.gz.sha512"
-    sha512sum -c "$pkgname-$pkgver.tar.gz.sha512"
-
-    tar -xf "$pkgname-$pkgver.tar.gz"
-
-    cd "$pkgname-$pkgver"
-    cmake -D CMAKE_INSTALL_PREFIX=/usr \
-        -D CMAKE_INSTALL_LIBDIR=/usr/lib64 \
-        -D CMAKE_BUILD_TYPE=None \
-        -D ENABLE_STATIC=OFF \
-        -D WITH_JAVA=OFF \
-        -D WITH_JPEG8=ON \
-        -G Ninja \
-        -W no-dev \
-        .
-    cmake --build .
-    ninja install
-    install -vDm 644 jpegint.h /usr/include
-)
-echo "Building libjpeg-turbo done."
-
-# refresh linker cache
-ldconfig
+if [[ -d /usr/lib64/ccache ]]
+then
+    export PATH="/usr/lib64/ccache:$PATH"
+elif [[ -d /usr/lib/ccache ]]
+then
+    export PATH="/usr/lib/ccache:$PATH"
+fi
 
 export pkgdir="$BUILD_DIR/AppDir"
 
@@ -162,17 +66,11 @@ echo "Building droidcam done."
 mkdir -p AppDir
 zstd -d -k -c "$OUT_DIR/v4l2loopback-dc.tar.zst" | tar -xf - -C AppDir
 
-# create appimages
-curl -sSLo linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-chmod +x linuxdeploy-x86_64.AppImage
-curl -sSLo linuxdeploy-plugin-appimage-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-chmod +x linuxdeploy-plugin-appimage-x86_64.AppImage
-curl -sSLo linuxdeploy-plugin-gtk.sh https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh
-chmod +x linuxdeploy-plugin-gtk.sh
+# linuxdeploy tooling is pre-installed under /opt/linuxdeploy by the intermediate image.
+cp /opt/linuxdeploy/linuxdeploy-x86_64.AppImage .
+cp /opt/linuxdeploy/linuxdeploy-plugin-appimage-x86_64.AppImage .
+cp /opt/linuxdeploy/linuxdeploy-plugin-gtk.sh .
 cp "$OUT_DIR/linuxdeploy-plugin-droidcam.sh" .
-
-# fix girepository-1.0 path
-mkdir -p /usr/lib/x86_64-linux-gnu/girepository-1.0
 
 DROIDCAM_VERSION=2.1.5
 KERNEL_VERSION="$(zstd -d -k -c "$OUT_DIR/v4l2loopback-dc.tar.zst" | tar -tf - | grep /v4l2loopback-dc\.ko | sed 's#^[./]*##' | sort -u | tail -n 1 | cut -d/ -f4)"

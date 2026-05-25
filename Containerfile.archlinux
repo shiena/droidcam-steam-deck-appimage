@@ -1,0 +1,26 @@
+FROM docker.io/library/archlinux:latest
+
+# git is needed to pre-clone the droidcam AUR below. It will be replaced by the SteamOS-mirrored
+# version when v4l2loopback-dc-build.sh runs its `pacman -S --overwrite='*'` pass. We do NOT
+# pre-install packages that may be missing in older SteamOS snapshots (e.g. ccache), because the
+# overwrite step would then fail when those package names cannot be resolved in any repo.
+RUN pacman -Sy --noconfirm --needed git \
+    && pacman -Scc --noconfirm
+
+# Pre-create build user and sudoers entry so the build script can skip these steps
+RUN useradd -m builduser \
+    && mkdir -p /etc/sudoers.d \
+    && echo 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
+
+# Pre-clone droidcam AUR with the PKGBUILD edits the build script applies.
+# Subsequent iterations of v4l2loopback-dc-build.sh skip the clone because the dir already exists.
+USER builduser
+WORKDIR /home/builduser
+RUN git clone https://aur.archlinux.org/droidcam.git \
+    && cd droidcam \
+    && sed -i \
+        -e 's/^\(pkgname\s*=\).*$/\1v4l2loopback-dc-dkms/' \
+        -e 's/^\(makedepends\s*=\)/#\1/' \
+        -e 's/^\(build()\)/_\1/' PKGBUILD
+USER root
+WORKDIR /
