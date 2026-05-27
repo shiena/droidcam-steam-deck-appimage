@@ -3,7 +3,7 @@ set -eux
 
 # Local image tags for the pre-baked intermediate images (see Containerfile.*).
 ARCH_IMAGE='droidcam-build/archlinux:local'
-CENTOS_IMAGE='droidcam-build/centos:local'
+ALMALINUX_IMAGE='droidcam-build/almalinux:local'
 
 # Host cache directories — created if missing so podman bind-mounts succeed.
 CACHE_DIR="$(pwd)/.cache"
@@ -16,7 +16,7 @@ mkdir -p "$PACMAN_PKG_CACHE" "$KERNEL_PKG_CACHE" "$CCACHE_DIR"
 { set +x; } 2>/dev/null
 set -x
 podman build -t "$ARCH_IMAGE" -f Containerfile.archlinux .
-podman build -t "$CENTOS_IMAGE" -f Containerfile.centos .
+podman build -t "$ALMALINUX_IMAGE" -f Containerfile.almalinux .
 
 repo_suffixes=('-staging' '-main' '-beta' '-rel' '-3.6' '-3.5' '-3.3.3' '-3.3.2' '-3.3.1' '-3.3' '-3.2' '-3.1' '-3.0' '')
 total="${#repo_suffixes[@]}"
@@ -43,5 +43,5 @@ podman run \
     -v ./:/tmp/out \
     -v "${CCACHE_DIR}:/ccache" \
     -e CCACHE_DIR=/ccache \
-    --rm -ti "$CENTOS_IMAGE" /tmp/out/droidcam-build.sh
+    --rm -ti "$ALMALINUX_IMAGE" /tmp/out/droidcam-build.sh
 { set +x; } 2>/dev/null

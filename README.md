@@ -27,7 +27,7 @@ ln -s DroidCam-*-x86_64_SteamDeck.AppImage droidcam-cli
 Requires podman or docker.
 It will use the archlinux image converted into a SteamOS base to build the kernel module `v4l2loopback-dc`.
 
-The DroidCam gui application is built in ubuntu 20.04.
+The DroidCam gui application is built in AlmaLinux 8.
 
 ```sh
 ./build.sh

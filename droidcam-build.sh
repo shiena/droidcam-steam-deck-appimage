@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux
-# This script expects the centos:7 intermediate image built from Containerfile.centos,
-# which already has yum deps, libjpeg-turbo, and the linuxdeploy tools baked in.
+# This script expects the almalinux:8 intermediate image built from Containerfile.almalinux,
+# which already has dnf deps, libjpeg-turbo, and the linuxdeploy tools baked in.
 OUT_DIR="/tmp/out"
 
 TEMP_BASE=/tmp
