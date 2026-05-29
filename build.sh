@@ -18,7 +18,17 @@ set -x
 podman build -t "$ARCH_IMAGE" -f Containerfile.archlinux .
 podman build -t "$ALMALINUX_IMAGE" -f Containerfile.almalinux .
 
-repo_suffixes=('-staging' '-main' '-beta' '-rel' '-3.6' '-3.5' '-3.3.3' '-3.3.2' '-3.3.1' '-3.3' '-3.2' '-3.1' '-3.0' '')
+# Released SteamOS snapshots only — dev/preview rolling channels (-staging/-main) ship kernels
+# that never reach a release, and their snapshot drifts on every build, so their modules go stale
+# and aren't used by released devices. The kept suffixes are NOT strict supersets of each other,
+# so all are built and the already-built dedup collapses the overlap:
+#   '-3.8.1x' newest released snapshot; sole source of the latest 6.16 point releases
+#             (e.g. linux-neptune-616 6.16.12.valve24.4, absent from '-3.8').
+#   '-3.8'    prior release; sole source of the -1.1 pkgrel rebuilds of the 6.11/6.16/6.18
+#             kernels (e.g. 6.11.11.valve29-1.1, 6.18.33.valve2-1.1) absent from '-3.8.1x'.
+#   '-3.7'    older release kept as overlap/resilience (mostly skipped via already-built dedup).
+# Maintenance: when a newer SteamOS ships a new kernel, prepend its snapshot suffix here.
+repo_suffixes=('-3.8.1x' '-3.8' '-3.7')
 total="${#repo_suffixes[@]}"
 i=0
 for s in "${repo_suffixes[@]}"

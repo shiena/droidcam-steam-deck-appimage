@@ -11,12 +11,14 @@ mkdir -p "$KERNEL_PKG_CACHE"
 # Build parallelism. ccache is wired later (after the SteamOS overwrite + pacman install).
 export MAKEFLAGS="-j$(nproc)"
 
-repo_suffixes=('-staging' '-main' '-beta' '-rel' '-3.6' '-3.5' '-3.3.3' '-3.3.2' '-3.3.1' '-3.3' '-3.2' '-3.1' '-3.0' '')
-_rs=("${repo_suffixes[@]:0:${#repo_suffixes[@]}-1}")
-for s in "${_rs[@]}"
-do
-    repo_suffixes=("${repo_suffixes[@]:0:${#_rs[@]}+1}" "$s" "${repo_suffixes[@]:${#_rs[@]}+1}")
-done
+# Released SteamOS snapshots only — must match build.sh. The suffixes are NOT strict supersets of
+# each other: '-3.8.1x' (newest release) is the sole source of the latest 6.16 point releases
+# (e.g. 6.16.12.valve24.4), '-3.8' the sole source of the -1.1 pkgrel kernel rebuilds, and '-3.7'
+# older overlap. All are built; the already-built dedup collapses the overlap.
+# The active dependency repos (jupiter/holo/core/extra) are present in every kept suffix; the
+# retired 'community' repo (folded into extra) only survives under '-3.7', but the forward fallback
+# search below resolves each repo to the first suffix that has it — no list-doubling wrap-around needed.
+repo_suffixes=('-3.8.1x' '-3.8' '-3.7')
 i=0
 for s in "${repo_suffixes[@]}"
 do
