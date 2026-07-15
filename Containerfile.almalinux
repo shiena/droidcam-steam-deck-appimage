@@ -1,10 +1,13 @@
 FROM docker.io/library/almalinux:8
 
-# dnf repos and all build/runtime dependencies for droidcam.
-# AlmaLinux 8 (glibc 2.28) is supported until 2029-05-31 so no archive-mirror gymnastics are needed.
-# - epel-release: libappindicator-gtk3, libplist, libusbmuxd, ccache, ninja-build
-# - powertools: some -devel headers live in this repo (CRB on EL9)
-# - RPM Fusion EL8: ffmpeg / ffmpeg-devel
+# dnf repos and all build/runtime dependencies for the DroidCam OBS client (a slim OBS Studio
+# 27.2 fork built with -DDROIDCAM_OVERRIDE=ON, no browser/CEF, no scripting).
+# AlmaLinux 8 (glibc 2.28) is supported until 2029-05-31 and its older glibc makes the binaries
+# forward-compatible with the newer SteamOS userland.
+# - epel-release: ninja-build, jansson-devel, mbedtls-devel, speexdsp-devel, ccache
+# - powertools: assorted -devel headers (CRB on EL9), incl. the droidcam-obs-plugin deps
+#   libusbmuxd-devel / libimobiledevice-devel / libplist-devel (turbojpeg is built from source below)
+# - RPM Fusion EL8: ffmpeg / ffmpeg-devel / x264-devel
 # Baked into the image so the per-build container doesn't pay dnf install cost each time.
 RUN dnf -y update \
     && dnf -y install dnf-plugins-core epel-release \
@@ -12,72 +15,72 @@ RUN dnf -y update \
     && dnf -y localinstall --nogpgcheck https://download1.rpmfusion.org/free/el/rpmfusion-free-release-8.noarch.rpm \
     && dnf -y groupinstall 'Development Tools' \
     && dnf -y install \
-        pkg-config \
+        pkgconf-pkg-config \
         git \
         cmake \
-        nasm \
         ninja-build \
         curl \
         zstd \
         fuse \
         fuse-libs \
-        ffmpeg \
+        qt5-qtbase-devel \
+        qt5-qtbase-private-devel \
+        qt5-qtsvg-devel \
+        qt5-qtx11extras-devel \
         ffmpeg-devel \
-        alsa-lib \
+        x264-devel \
+        mbedtls-devel \
+        jansson-devel \
+        libcurl-devel \
+        speexdsp-devel \
+        freetype-devel \
+        fontconfig-devel \
+        zlib-devel \
         alsa-lib-devel \
-        speex \
-        speex-devel \
-        libusbmuxd \
-        libusbmuxd-devel \
-        libplist \
-        libplist-devel \
-        libappindicator-gtk3 \
-        libappindicator-gtk3-devel \
-        librsvg2 \
-        librsvg2-devel \
+        pulseaudio-libs-devel \
+        mesa-libGL-devel \
+        mesa-libEGL-devel \
+        libX11-devel \
+        libxcb-devel \
+        libXcomposite-devel \
+        libXinerama-devel \
+        libXrandr-devel \
+        libXfixes-devel \
+        libxkbcommon-devel \
+        libv4l-devel \
+        pciutils-devel \
+        kernel-headers \
         ccache \
+        nasm \
+        libusbmuxd-devel \
+        libimobiledevice-devel \
+        libplist-devel \
     && dnf clean all
 
-# Pre-build libjpeg-turbo 3.0.3 into /usr (matches droidcam-build.sh build).
-# Doing this in the image means we skip the cmake+ninja step on every container run.
-RUN set -eux \
-    && pkgname=libjpeg-turbo \
-    && pkgver=3.0.3 \
-    && cd /tmp \
-    && curl -sSLo "${pkgname}-${pkgver}.tar.gz" \
-        "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${pkgver}/${pkgname}-${pkgver}.tar.gz" \
-    && echo "7c3a6660e7a54527eaa40929f5cc3d519842ffb7e961c32630ae7232b71ecaa19e89dbf5600c61038f0c5db289b607c2316fe9b6b03d482d770bcac29288d129 ${pkgname}-${pkgver}.tar.gz" \
-        > "${pkgname}-${pkgver}.tar.gz.sha512" \
-    && sha512sum -c "${pkgname}-${pkgver}.tar.gz.sha512" \
-    && tar -xf "${pkgname}-${pkgver}.tar.gz" \
-    && cd "${pkgname}-${pkgver}" \
-    && cmake -D CMAKE_INSTALL_PREFIX=/usr \
-        -D CMAKE_INSTALL_LIBDIR=/usr/lib64 \
-        -D CMAKE_BUILD_TYPE=None \
-        -D ENABLE_STATIC=OFF \
-        -D WITH_JAVA=OFF \
-        -D WITH_JPEG8=ON \
-        -G Ninja \
-        -W no-dev \
-        . \
-    && cmake --build . \
-    && ninja install \
-    && install -vDm 644 jpegint.h /usr/include \
-    && ldconfig \
-    && cd / \
-    && rm -rf "/tmp/${pkgname}-${pkgver}" "/tmp/${pkgname}-${pkgver}.tar.gz" "/tmp/${pkgname}-${pkgver}.tar.gz.sha512"
+# Build libjpeg-turbo from source. AlmaLinux 8 ships turbojpeg 1.5.3 with RHEL's reduced pre-1.4
+# API (no tjGetErrorStr2/tjGetErrorCode), which droidcam-obs-plugin's mjpeg decoder needs. Install
+# over /usr with the default SONAMEs (libjpeg.so.62 / libturbojpeg.so.0) so it's a drop-in upgrade
+# that pkg-config and the linker pick up automatically. (nasm provides the SIMD assembler.)
+ARG LIBJPEG_TURBO_VERSION=3.0.4
+RUN curl -sSLo /tmp/ljt.tar.gz \
+        "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${LIBJPEG_TURBO_VERSION}/libjpeg-turbo-${LIBJPEG_TURBO_VERSION}.tar.gz" \
+    && mkdir -p /tmp/ljt-src \
+    && tar -xf /tmp/ljt.tar.gz -C /tmp/ljt-src --strip-components=1 \
+    && cmake -G Ninja -S /tmp/ljt-src -B /tmp/ljt-build \
+        -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=OFF -Wno-dev \
+    && cmake --build /tmp/ljt-build \
+    && cmake --install /tmp/ljt-build \
+    && rm -rf /tmp/ljt.tar.gz /tmp/ljt-src /tmp/ljt-build
 
-# Pre-download linuxdeploy AppImages and gtk plugin so each build run can reuse them.
+# Pre-download linuxdeploy AppImages and the Qt plugin so each build run can reuse them.
 RUN mkdir -p /opt/linuxdeploy \
     && curl -sSLo /opt/linuxdeploy/linuxdeploy-x86_64.AppImage \
         https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
     && curl -sSLo /opt/linuxdeploy/linuxdeploy-plugin-appimage-x86_64.AppImage \
         https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage \
-    && curl -sSLo /opt/linuxdeploy/linuxdeploy-plugin-gtk.sh \
-        https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh \
+    && curl -sSLo /opt/linuxdeploy/linuxdeploy-plugin-qt-x86_64.AppImage \
+        https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage \
     && chmod +x /opt/linuxdeploy/linuxdeploy-x86_64.AppImage \
         /opt/linuxdeploy/linuxdeploy-plugin-appimage-x86_64.AppImage \
-        /opt/linuxdeploy/linuxdeploy-plugin-gtk.sh
-
-# girepository-1.0 path expected by linuxdeploy-plugin-gtk.
-RUN mkdir -p /usr/lib/x86_64-linux-gnu/girepository-1.0
+        /opt/linuxdeploy/linuxdeploy-plugin-qt-x86_64.AppImage

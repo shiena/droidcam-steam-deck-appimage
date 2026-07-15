@@ -43,7 +43,7 @@ do
         -v "${CCACHE_DIR}:/ccache" \
         --tmpfs /tmp/build:exec \
         -e CCACHE_DIR=/ccache \
-        --rm -ti "$ARCH_IMAGE" /tmp/out/v4l2loopback-dc-build.sh "$s"
+        --rm -ti "$ARCH_IMAGE" /tmp/out/v4l2loopback-build.sh "$s"
 done
 { set +x; } 2>/dev/null
 set -x
@@ -53,5 +53,5 @@ podman run \
     -v ./:/tmp/out \
     -v "${CCACHE_DIR}:/ccache" \
     -e CCACHE_DIR=/ccache \
-    --rm -ti "$ALMALINUX_IMAGE" /tmp/out/droidcam-build.sh
+    --rm -ti "$ALMALINUX_IMAGE" /tmp/out/obs-build.sh
 { set +x; } 2>/dev/null
